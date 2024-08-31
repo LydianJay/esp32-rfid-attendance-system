@@ -1,2 +1,0 @@
-#define WIFI_SSID "GlobeAtHome_434FB"
-#define WIFI_PASSWORD "414EDDF3"
