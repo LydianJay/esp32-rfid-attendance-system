@@ -2,15 +2,48 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <MFRC522.h>
+#include <WiFiManager.h> 
 #include "credentials.h"
-
+#include <SPIFFS.h>
+#include <FS.h>
 MFRC522 rfid; 
 MFRC522::MIFARE_Key key; 
 byte nuidPICC[4] = {0x0, 0x0, 0x0, 0x0};
 String strRFID = "";
+String serverIP;
 constexpr uint8_t RST_PIN = 0;         
 constexpr uint8_t SS_PIN = 5;  
 void inserData();
+
+
+bool readFile(fs::FS &fs, const char * path){
+  Serial.printf("Reading file: %s\r\n", path);
+  File file = fs.open(path);
+  if(!file || file.isDirectory()){
+      Serial.println("- failed to open file for reading");
+      return false;
+  }
+  
+  serverIP = file.readString();
+  Serial.println("Server IP set to: " + serverIP);
+  file.close();
+  return true;
+}
+void writeFile(fs::FS &fs, const char * path, const char * message){
+    Serial.printf("Writing file: %s\r\n", path);
+    File file = fs.open(path, FILE_WRITE);
+    if(!file){
+        Serial.println("- failed to open file for writing");
+        return;
+    }
+    if(file.print(message)){
+        Serial.println("- file written");
+    } else {
+        Serial.println("- write failed");
+    }
+    file.close();
+}
+
 void printHex(byte *buffer, byte bufferSize) {
   for (byte i = 0; i < bufferSize; i++) {
     Serial.print(buffer[i] < 0x10 ? " 0" : " ");
@@ -43,7 +76,7 @@ void readRFID() {
 
   strRFID = "";
   for (byte i = 0; i < 4; i++) {
-    nuidPICC[i] = rfid.uid.uidByte[i];
+    nuidPICC[3 - i] = rfid.uid.uidByte[i];
     strRFID += nuidPICC[i];
   }
   Serial.println(F("The NUID tag is:"));
@@ -62,11 +95,17 @@ void readRFID() {
 
 void inserData() {
   HTTPClient http;
-  http.begin("http://192.168.254.102/flutter-rfid-attendance-system-backend/set/insert_attendance.php");
+  String url = 
+  "http://" + 
+  serverIP + 
+  "/flutter-rfid-attendance-system-backend/set/insert_attendance.php";  
+  
+  http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
+  uint32_t* rfid = (uint32_t*)nuidPICC;
 
-  String payload = "{\"rfid\" : \"" + strRFID + "\"}";
+  String payload = "{\"rfid\" : \"" + String(*rfid) + "\"}";
   Serial.print("\nSQL: ");
   Serial.println(payload);
   Serial.print("Result: ");
@@ -77,17 +116,30 @@ void inserData() {
 void setup() {
   Serial.begin(115200);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.println("Connecting");
-  while(WiFi.status() != WL_CONNECTED) { 
-    delay(500);
-    Serial.print(".");
+  WiFiManager wm;
+ 
+  WiFiManagerParameter param("sip", "server ip", "", 32);
+  wm.addParameter(&param);
+  
+  wm.autoConnect("RFID", "admin123");
+  serverIP = String(param.getValue());
+  Serial.println(serverIP);
+  if(!SPIFFS.begin(true)){
+    Serial.println("SPIFFS Mount Failed");
+    return;
   }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
-
+  if(!serverIP.isEmpty()){
+    Serial.println("Reset IP");
+    writeFile(SPIFFS, "/server.cfg", serverIP.c_str());
+  } else {
+    if(!readFile(SPIFFS, "/server.cfg")) {
+    
+      writeFile(SPIFFS, "/server.cfg", serverIP.c_str());
+    }
+  }
+ 
   SPI.begin();
+
   rfid.PCD_Init(SS_PIN, RST_PIN); 
   rfid.PCD_DumpVersionToSerial();
 
