@@ -41,25 +41,16 @@ void readRFID() {
     return;
   }
 
-  if (rfid.uid.uidByte[0] != nuidPICC[0] || 
-    rfid.uid.uidByte[1] != nuidPICC[1] || 
-    rfid.uid.uidByte[2] != nuidPICC[2] || 
-    rfid.uid.uidByte[3] != nuidPICC[3] ) {
-    Serial.println(F("A new card has been detected."));
-
-    for (byte i = 0; i < 4; i++) {
-      nuidPICC[i] = rfid.uid.uidByte[i];
-      strRFID += nuidPICC[i];
-    }
-    Serial.println(F("The NUID tag is:"));
-    Serial.print(F("In hex: "));
-    printHex(rfid.uid.uidByte, rfid.uid.size);
-    inserData();
-    Serial.println();
-    
+  strRFID = "";
+  for (byte i = 0; i < 4; i++) {
+    nuidPICC[i] = rfid.uid.uidByte[i];
+    strRFID += nuidPICC[i];
   }
-  else Serial.println(F("Card read previously."));
-
+  Serial.println(F("The NUID tag is:"));
+  Serial.print(F("In hex: "));
+  printHex(rfid.uid.uidByte, rfid.uid.size);
+  inserData();
+  Serial.println();
 
   rfid.PICC_HaltA();
 
@@ -71,13 +62,12 @@ void readRFID() {
 
 void inserData() {
   HTTPClient http;
-  http.begin("http://192.168.254.102/RFID_system_backend/index.php");
+  http.begin("http://192.168.254.102/flutter-rfid-attendance-system-backend/set/insert_attendance.php");
   http.addHeader("Content-Type", "application/json");
 
-  
-  String date(245);
-  String payload = "{\"rfid\" : " + strRFID + ",\"date\" : " + date + "}";
-  Serial.print("SQL: ");
+
+  String payload = "{\"rfid\" : \"" + strRFID + "\"}";
+  Serial.print("\nSQL: ");
   Serial.println(payload);
   Serial.print("Result: ");
   Serial.println(http.POST(payload));
