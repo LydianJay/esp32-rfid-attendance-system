@@ -84,10 +84,7 @@ void readRFID() {
   printHex(rfid.uid.uidByte, rfid.uid.size);
   inserData();
   Serial.println();
-
   rfid.PICC_HaltA();
-
-
   rfid.PCD_StopCrypto1();
 
 
@@ -133,7 +130,6 @@ void setup() {
     writeFile(SPIFFS, "/server.cfg", serverIP.c_str());
   } else {
     if(!readFile(SPIFFS, "/server.cfg")) {
-    
       writeFile(SPIFFS, "/server.cfg", serverIP.c_str());
     }
   }
@@ -141,10 +137,13 @@ void setup() {
   SPI.begin();
 
   rfid.PCD_Init(SS_PIN, RST_PIN); 
-  rfid.PCD_DumpVersionToSerial();
+  
+  byte v = rfid.PCD_ReadRegister(rfid.VersionReg);
+  if(v != 0xFF || v!= 0x00){
+    Serial.println("RFID Ok!");
+  }
 
-
-
+ 
 
 }
 
