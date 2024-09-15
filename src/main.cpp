@@ -11,8 +11,13 @@ MFRC522::MIFARE_Key key;
 byte nuidPICC[4] = {0x0, 0x0, 0x0, 0x0};
 String strRFID = "";
 String serverIP;
-constexpr uint8_t RST_PIN = 0;         
-constexpr uint8_t SS_PIN = 5;  
+bool error    = false;
+
+constexpr uint8_t RST_PIN       = 0;         
+constexpr uint8_t SS_PIN        = 5;  
+constexpr uint8_t pinError      = 17;
+constexpr uint8_t pinComError   = 21;
+constexpr uint8_t pinReady      = 22;
 void inserData();
 
 
@@ -82,12 +87,19 @@ void readRFID() {
   Serial.println(F("The NUID tag is:"));
   Serial.print(F("In hex: "));
   printHex(rfid.uid.uidByte, rfid.uid.size);
-  inserData();
+ 
   Serial.println();
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
-
-
+  for(int i = 0; i < 3; i++) {
+    digitalWrite(pinReady, LOW);
+    delay(100);
+    digitalWrite(pinReady, HIGH);
+    delay(100);
+  }
+  
+  
+  inserData();
 }
 
 void inserData() {
@@ -105,14 +117,35 @@ void inserData() {
   String payload = "{\"rfid\" : \"" + String(*rfid) + "\"}";
   Serial.print("\nSQL: ");
   Serial.println(payload);
-  Serial.print("Result: ");
-  Serial.println(http.POST(payload));
+  if(http.POST(payload) != 200) {
+    Serial.println("Error Com");
+    for(int i = 0; i < 5; i++){
+      digitalWrite(pinReady, LOW);
+      digitalWrite(pinComError, HIGH);
+      delay(320);
+      digitalWrite(pinReady, HIGH);
+      digitalWrite(pinComError, LOW);
+      delay(320);
+    }
+    
+    
+  }
+  else {
+    digitalWrite(pinComError, LOW);
+    
+  }
+  digitalWrite(pinReady, LOW);
 }
 
 
 void setup() {
   Serial.begin(115200);
-
+  pinMode(pinError,     OUTPUT);
+  pinMode(pinComError,  OUTPUT);
+  pinMode(pinReady,     OUTPUT);
+  digitalWrite(pinError,    LOW);
+  digitalWrite(pinComError, HIGH);
+  digitalWrite(pinReady,    LOW);
   WiFiManager wm;
  
   WiFiManagerParameter param("sip", "server ip", "", 32);
@@ -123,7 +156,7 @@ void setup() {
   Serial.println(serverIP);
   if(!SPIFFS.begin(true)){
     Serial.println("SPIFFS Mount Failed");
-    return;
+    error = true;
   }
   if(!serverIP.isEmpty()){
     Serial.println("Reset IP");
@@ -139,12 +172,28 @@ void setup() {
   rfid.PCD_Init(SS_PIN, RST_PIN); 
   
   byte v = rfid.PCD_ReadRegister(rfid.VersionReg);
-  if(v != 0xFF || v!= 0x00){
+  if(v != 0xFF && v != 0x00){
     Serial.println("RFID Ok!");
+
   }
+  else {
+    Serial.println("Version Reg: " + String(v));
+    error = true;
+  }
+  
 
+  WiFi.status() == WL_CONNECTED ? Serial.println("Wifi Connected\n") : error = true;
+
+  // Stops device for functioning if error has occured in initialization
+  while (error) {
+    digitalWrite(pinError, HIGH);
+    delay(350);
+    digitalWrite(pinError, LOW);
+    delay(350);
+  }
+  
  
-
+  digitalWrite(pinComError,    LOW);
 }
 
 void loop() {
