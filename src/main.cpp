@@ -15,10 +15,23 @@ bool error    = false;
 
 constexpr uint8_t RST_PIN       = 0;         
 constexpr uint8_t SS_PIN        = 5;  
-constexpr uint8_t pinError      = 17;
-constexpr uint8_t pinComError   = 21;
-constexpr uint8_t pinReady      = 22;
+constexpr uint8_t pinError      = 25;
+constexpr uint8_t pinComError   = 32;
+constexpr uint8_t pinReady      = 14;
+constexpr uint8_t pinReset      = 15;
 void inserData();
+
+
+void deleteFile(fs::FS &fs, const char * path) {
+  File file = fs.open(path);
+  if(!file || file.isDirectory()){
+    Serial.println("- failed to open file for reading");
+    return;
+  }
+  Serial.println("Deleting config file");
+  file.close();
+  fs.remove(path);
+}
 
 
 bool readFile(fs::FS &fs, const char * path){
@@ -143,11 +156,22 @@ void setup() {
   pinMode(pinError,     OUTPUT);
   pinMode(pinComError,  OUTPUT);
   pinMode(pinReady,     OUTPUT);
+  pinMode(pinReset,     INPUT_PULLDOWN);
   digitalWrite(pinError,    LOW);
   digitalWrite(pinComError, HIGH);
   digitalWrite(pinReady,    LOW);
   WiFiManager wm;
- 
+  const int resetRead = digitalRead(pinReset);
+  if(resetRead == HIGH){
+    wm.resetSettings();
+    
+    digitalWrite(pinError,    HIGH);
+    digitalWrite(pinComError, HIGH);
+    digitalWrite(pinReady,    LOW);
+    Serial.println("Resetting WiFi...");
+  }
+  Serial.println(resetRead);
+
   WiFiManagerParameter param("sip", "server ip", "", 32);
   wm.addParameter(&param);
   
@@ -158,6 +182,7 @@ void setup() {
     Serial.println("SPIFFS Mount Failed");
     error = true;
   }
+
   if(!serverIP.isEmpty()){
     Serial.println("Reset IP");
     writeFile(SPIFFS, "/server.cfg", serverIP.c_str());
